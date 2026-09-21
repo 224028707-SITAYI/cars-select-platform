@@ -1,0 +1,479 @@
+// Cars Select - Production Prisma Schema
+// Supports multi-sided marketplace: dealers, private sellers, parts, services
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum Role {
+  GUEST
+  USER
+  PRIVATE_SELLER
+  DEALERSHIP
+  PARTS_SELLER
+  SERVICE_CENTRE
+  IMPORTER_EXPORTER
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  PAUSED
+  SOLD
+  REJECTED
+  ARCHIVED
+}
+
+enum VehicleCategory {
+  CAR
+  BIKE
+  LEISURE
+  COMMERCIAL
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  HYBRID
+  ELECTRIC
+  PLUGIN_HYBRID
+  LPG
+  OTHER
+}
+
+enum Transmission {
+  MANUAL
+  AUTOMATIC
+  CVT
+  SEMI_AUTO
+}
+
+enum BodyType {
+  SEDAN
+  HATCHBACK
+  SUV
+  COUPE
+  CONVERTIBLE
+  WAGON
+  VAN
+  PICKUP
+  MINIBUS
+  OTHER
+}
+
+enum DriveType {
+  FWD
+  RWD
+  AWD
+  FOUR_WD
+}
+
+enum SellerType {
+  PRIVATE
+  DEALER
+  IMPORTER
+}
+
+enum InquiryStatus {
+  OPEN
+  REPLIED
+  CLOSED
+  SPAM
+}
+
+enum AlertFrequency {
+  INSTANT
+  DAILY
+  WEEKLY
+}
+
+// ==================== MODELS ====================
+
+model User {
+  id                String             @id @default(cuid())
+  email             String             @unique
+  emailVerified     DateTime?
+  passwordHash      String?
+  name              String?
+  phone             String?
+  image             String?
+  role              Role               @default(USER)
+  verificationStatus VerificationStatus @default(PENDING)
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  // Profile
+  bio               String?
+  location          String?
+  city              String?
+  country           String?            @default("ZA")
+
+  // Dealer / Business fields
+  businessName      String?
+  businessRegNo     String?
+  vatNumber         String?
+  website           String?
+  logoUrl           String?
+  coverImageUrl     String?
+  dealerRating      Float?             @default(0)
+  reviewCount       Int                @default(0)
+  verifiedAt        DateTime?
+  verifiedBy        String?
+
+  // Relations
+  accounts          Account[]
+  sessions          Session[]
+  listings          Listing[]
+  favourites        Favourite[]
+  searchAlerts      SearchAlert[]
+  inquiriesSent     Inquiry[]          @relation("BuyerInquiries")
+  inquiriesReceived Inquiry[]          @relation("SellerInquiries")
+  reviewsGiven      Review[]           @relation("ReviewsGiven")
+  reviewsReceived   Review[]           @relation("ReviewsReceived")
+  auditLogs         AuditLog[]
+  messages          Message[]
+
+  @@index([email])
+  @@index([role])
+  @@index([verificationStatus])
+  @@index([city])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==================== LISTINGS ====================
+
+model Listing {
+  id              String         @id @default(cuid())
+  sellerId        String
+  status          ListingStatus  @default(DRAFT)
+  category        VehicleCategory @default(CAR)
+  title           String
+  description     String         @db.Text
+  price           Int            // in cents / minor units
+  currency        String         @default("ZAR")
+  isNegotiable    Boolean        @default(false)
+  isFeatured      Boolean        @default(false)
+  isSponsored     Boolean        @default(false)
+  views           Int            @default(0)
+  favouritesCount Int            @default(0)
+
+  // Vehicle specifics
+  make            String
+  model           String
+  variant         String?
+  year            Int
+  mileage         Int?           // km
+  fuelType        FuelType?
+  transmission    Transmission?
+  bodyType        BodyType?
+  driveType       DriveType?
+  colour          String?
+  seats           Int?
+  doors           Int?
+  owners          Int?
+  engineSize      Float?         // litres
+  power           Int?           // kW or hp
+  serviceHistory  Boolean        @default(false)
+  accidentFree    Boolean        @default(true)
+  features        String[]       // array of feature tags
+
+  // Location
+  city            String?
+  province        String?
+  country         String?        @default("ZA")
+  latitude        Float?
+  longitude       Float?
+
+  // Seller type snapshot
+  sellerType      SellerType     @default(PRIVATE)
+
+  // Condition & extras
+  condition       String?        // New / Used / Certified
+  vin             String?
+  stockNumber     String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  publishedAt     DateTime?
+  expiresAt       DateTime?
+
+  seller          User           @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  images          ListingImage[]
+  favourites      Favourite[]
+  inquiries       Inquiry[]
+
+  @@index([status])
+  @@index([category])
+  @@index([make, model])
+  @@index([price])
+  @@index([year])
+  @@index([city])
+  @@index([sellerId])
+  @@index([isFeatured])
+  @@index([isSponsored])
+  @@index([createdAt])
+  @@index([make, model, year, price])
+}
+
+model ListingImage {
+  id        String   @id @default(cuid())
+  listingId String
+  url       String
+  publicId  String?  // Cloudinary public_id
+  alt       String?
+  order     Int      @default(0)
+  isPrimary Boolean  @default(false)
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
+
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+// ==================== PARTS & SERVICES ====================
+
+model PartListing {
+  id          String        @id @default(cuid())
+  sellerId    String
+  status      ListingStatus @default(DRAFT)
+  title       String
+  description String        @db.Text
+  price       Int
+  currency    String        @default("ZAR")
+  condition   String?       // New / Used / Refurbished
+  brand       String?
+  partNumber  String?
+  category    String?       // Engine, Brakes, Body, etc.
+  compatibleMakes String[]
+  images      String[]
+  city        String?
+  views       Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status])
+  @@index([sellerId])
+  @@index([category])
+}
+
+model ServiceListing {
+  id          String        @id @default(cuid())
+  sellerId    String
+  status      ListingStatus @default(DRAFT)
+  title       String
+  description String        @db.Text
+  priceFrom   Int?
+  currency    String        @default("ZAR")
+  category    String?       // Service, Repair, Detailing, etc.
+  services    String[]
+  images      String[]
+  city        String?
+  address     String?
+  phone       String?
+  website     String?
+  rating      Float?        @default(0)
+  reviewCount Int           @default(0)
+  views       Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status])
+  @@index([sellerId])
+  @@index([city])
+}
+
+// ==================== SOCIAL / ENGAGEMENT ====================
+
+model Favourite {
+  id        String   @id @default(cuid())
+  userId    String
+  listingId String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([userId])
+}
+
+model SearchAlert {
+  id          String         @id @default(cuid())
+  userId      String
+  name        String?
+  filters     Json           // stored filter criteria
+  frequency   AlertFrequency @default(DAILY)
+  isActive    Boolean        @default(true)
+  lastSentAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+model Inquiry {
+  id        String        @id @default(cuid())
+  listingId String?
+  buyerId   String
+  sellerId  String
+  subject   String?
+  message   String        @db.Text
+  status    InquiryStatus @default(OPEN)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  listing   Listing?      @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  buyer     User          @relation("BuyerInquiries", fields: [buyerId], references: [id])
+  seller    User          @relation("SellerInquiries", fields: [sellerId], references: [id])
+  messages  Message[]
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([listingId])
+  @@index([status])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  inquiryId String
+  senderId  String
+  body      String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  inquiry   Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id])
+
+  @@index([inquiryId])
+  @@index([senderId])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  reviewerId String
+  revieweeId String
+  rating     Int      // 1-5
+  comment    String?  @db.Text
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  reviewer   User     @relation("ReviewsGiven", fields: [reviewerId], references: [id])
+  reviewee   User     @relation("ReviewsReceived", fields: [revieweeId], references: [id])
+
+  @@unique([reviewerId, revieweeId])
+  @@index([revieweeId])
+}
+
+// ==================== ADMIN & SYSTEM ====================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String?
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Make {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  logoUrl   String?
+  models    Model[]
+  order     Int      @default(0)
+  isPopular Boolean  @default(false)
+
+  @@index([slug])
+}
+
+model Model {
+  id        String   @id @default(cuid())
+  makeId    String
+  name      String
+  slug      String
+  variants  String[]
+  make      Make     @relation(fields: [makeId], references: [id], onDelete: Cascade)
+
+  @@unique([makeId, slug])
+  @@index([makeId])
+}
+
+model FeaturedPlacement {
+  id        String   @id @default(cuid())
+  listingId String   @unique
+  position  Int      @default(0)
+  startsAt  DateTime @default(now())
+  endsAt    DateTime
+  createdAt DateTime @default(now())
+
+  @@index([endsAt])
+}

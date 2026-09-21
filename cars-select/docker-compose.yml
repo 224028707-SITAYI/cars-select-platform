@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: carsselect-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: carsselect
+      POSTGRES_PASSWORD: carsselect
+      POSTGRES_DB: carsselect
+    volumes:
+      - carsselect_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carsselect -d carsselect"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  carsselect_pgdata:
