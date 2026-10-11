@@ -1,5 +1,6 @@
 // Cars Select - Production Prisma Schema
 // Supports multi-sided marketplace: dealers, private sellers, parts, services
+// Currency: NAD (Namibian Dollar) | Country: Namibia (NA)
 
 generator client {
   provider = "prisma-client-js"
@@ -123,7 +124,7 @@ model User {
   bio               String?
   location          String?
   city              String?
-  country           String?            @default("ZA")
+  country           String?            @default("NA")
 
   // Dealer / Business fields
   businessName      String?
@@ -203,8 +204,8 @@ model Listing {
   category        VehicleCategory @default(CAR)
   title           String
   description     String         @db.Text
-  price           Int            // in cents / minor units
-  currency        String         @default("ZAR")
+  price           Int            // in cents / minor units (NAD cents)
+  currency        String         @default("NAD")
   isNegotiable    Boolean        @default(false)
   isFeatured      Boolean        @default(false)
   isSponsored     Boolean        @default(false)
@@ -234,7 +235,7 @@ model Listing {
   // Location
   city            String?
   province        String?
-  country         String?        @default("ZA")
+  country         String?        @default("NA")
   latitude        Float?
   longitude       Float?
 
@@ -295,7 +296,7 @@ model PartListing {
   title       String
   description String        @db.Text
   price       Int
-  currency    String        @default("ZAR")
+  currency    String        @default("NAD")
   condition   String?       // New / Used / Refurbished
   brand       String?
   partNumber  String?
@@ -319,7 +320,7 @@ model ServiceListing {
   title       String
   description String        @db.Text
   priceFrom   Int?
-  currency    String        @default("ZAR")
+  currency    String        @default("NAD")
   category    String?       // Service, Repair, Detailing, etc.
   services    String[]
   images      String[]
